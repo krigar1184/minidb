@@ -64,7 +64,7 @@ pub struct InsertStatement<'a> {
 
 impl<'a> InsertStatement<'a> {
     pub fn new(payload: &'a str) -> Self {
-        let (_, id, username, email) = regex_captures!(r"(\w+)\s+(\w+)\s+(\w+)\s+", payload).unwrap();
+        let (_, id, username, email) = regex_captures!(r"(\w+)\s*(\w+)\s*(\w+)\s*", payload).unwrap();
         let parsed_id: usize = id.parse().unwrap();
         let row = Row::new(parsed_id, username, email);
         InsertStatement {rows_to_insert: vec![row]}
