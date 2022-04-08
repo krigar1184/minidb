@@ -15,7 +15,16 @@ struct Page {
 }
 
 #[derive(Debug)]
-pub(crate) struct Row {
+pub(crate) struct Row<'a> {
+    id: usize,
+    username: &'a str,
+    email: &'a str,
+}
+
+impl<'a> Row<'a> {
+    pub fn new(id: usize, username: &'a str, email: &'a str) -> Self {
+        Row{id, username, email}
+    }
 }
 
 #[derive(Debug)]

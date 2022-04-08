@@ -1,3 +1,4 @@
+use std::io::stdin;
 use crate::statement::{Statement, StatementType, InvalidStatementError};
 
 #[derive(Debug)]
@@ -8,8 +9,9 @@ pub struct Command {
 impl Command {
     pub fn from_input() -> Self {
         let mut buffer = String::new();
-        std::io::stdin().read_line(&mut buffer).unwrap();
-        Command { data: buffer.trim_matches('\n').to_owned() }
+        stdin().read_line(&mut buffer).unwrap();
+        buffer = String::from(buffer.trim_matches('\n'));
+        Command { data: buffer }
     }
 
     pub fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
