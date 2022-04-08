@@ -4,12 +4,15 @@ use crate::table::Row;
 
 #[derive(Debug)]
 pub struct InvalidStatementError {
-    pub stmt: String,
+    pub stmt: Option<String>,
 }
 
 impl std::fmt::Display for InvalidStatementError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Unrecognized statement: {}", self.stmt)
+        match &self.stmt {
+            Some(v) => write!(f, "Unrecognized statement: {}", v),
+            None => write!(f, "Unrecognized statement"),
+        }
     }
 }
 
@@ -31,8 +34,8 @@ pub trait Statement<'a> {
 impl<'a> dyn Statement<'a> {
     pub fn new(r#type: StatementType, payload: &'a str) -> Box<dyn Statement<'a> + 'a> {
         let stmt: Box<dyn Statement<'a> + 'a> = match r#type {
-            StatementType::SELECT => Box::new(SelectStatement::new(payload)),
-            StatementType::INSERT => Box::new(InsertStatement::new(payload)),
+            StatementType::SELECT => Box::new(SelectStatement::new(payload).unwrap()),
+            StatementType::INSERT => Box::new(InsertStatement::new(payload).unwrap()),
         };
         stmt
     }
@@ -43,8 +46,8 @@ pub struct SelectStatement<'a> {
 }
 
 impl<'a> SelectStatement<'a> {
-    pub fn new(payload: &'a str) -> SelectStatement {
-        SelectStatement {rows_to_select: vec![]}
+    pub fn new(payload: &'a str) -> Result<Self> {
+        Ok(SelectStatement {rows_to_select: vec![]})
     }
 }
 
@@ -63,11 +66,14 @@ pub struct InsertStatement<'a> {
 }
 
 impl<'a> InsertStatement<'a> {
-    pub fn new(payload: &'a str) -> Self {
-        let (_, id, username, email) = regex_captures!(r"(\w+)\s*(\w+)\s*(\w+)\s*", payload).unwrap();
-        let parsed_id: usize = id.parse().unwrap();
-        let row = Row::new(parsed_id, username, email);
-        InsertStatement {rows_to_insert: vec![row]}
+    pub fn new(payload: &'a str) -> Result<Self> {
+        if let Some((_, id, username, email)) = regex_captures!(r"(\w+)\s*(\w+)\s*(\w+)\s*", payload) {
+            let parsed_id: u64 = id.parse().unwrap();
+            let row = Row::new(parsed_id, username, email);
+            return Ok(InsertStatement {rows_to_insert: vec![row]})
+        }
+
+        Err(InvalidStatementError{stmt: None})
     }
 }
 

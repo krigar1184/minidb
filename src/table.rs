@@ -1,9 +1,12 @@
-const ID_SIZE: usize = Attribute::<u32>::size_of();
-const USERNAME_SIZE: usize = Attribute::<&str>::size_of();
-const EMAIL_SIZE: usize = Attribute::<&str>::size_of();
+const ID_SIZE: usize = Column::<u32>::size_of();
 const ID_OFFSET: usize = 0;
+
+const USERNAME_SIZE: usize = Column::<&str>::size_of();
 const USERNAME_OFFSET: usize = ID_OFFSET + ID_SIZE;
+
+const EMAIL_SIZE: usize = Column::<&str>::size_of();
 const EMAIL_OFFSET: usize = USERNAME_OFFSET + USERNAME_SIZE;
+
 const ROW_SIZE: usize = ID_SIZE + USERNAME_SIZE + EMAIL_SIZE;
 
 const PAGE_SIZE: usize = 4096;
@@ -11,19 +14,45 @@ const ROWS_PER_PAGE: usize = PAGE_SIZE / ROW_SIZE;
 const TABLE_MAX_ROWS: usize = ROWS_PER_PAGE * 100;
 
 #[derive(Debug)]
+struct Column<T> {
+    value: T,
+}
+
+impl<T> Column<T> {
+    fn new(value: T) -> Self {
+        Column::<T> { value }
+    }
+
+    pub const fn size_of() -> usize {
+        std::mem::size_of::<T>()
+    }
+
+    fn size(&self) -> usize {
+        Self::size_of()
+    }
+}
+
+#[derive(Debug)]
 struct Page {
 }
 
 #[derive(Debug)]
 pub(crate) struct Row<'a> {
-    id: usize,
-    username: &'a str,
-    email: &'a str,
+    id: Column<u64>,
+    username: Column<&'a str>,
+    email: Column<&'a str>,
 }
 
 impl<'a> Row<'a> {
-    pub fn new(id: usize, username: &'a str, email: &'a str) -> Self {
-        Row{id, username, email}
+    pub fn new(id: u64, username: &'a str, email: &'a str) -> Self {
+        let id_col = Column{value: id};
+        let username_col = Column{value: username};
+        let email_col = Column{value: email};
+        Row{
+            id: id_col,
+            username: username_col,
+            email: email_col,
+        }
     }
 }
 
@@ -49,23 +78,3 @@ impl Table {
         let byte_offset = row_offset * ROW_SIZE;
     }
 }
-
-#[derive(Debug)]
-pub struct Attribute<T> {
-    pub value: T
-}
-
-impl<T> Attribute<T> {
-    fn new(value: T) -> Attribute<T> {
-        Attribute::<T> { value }
-    }
-
-    fn size(&self) -> usize {
-        Self::size_of()
-    }
-
-    pub const fn size_of() -> usize {
-        std::mem::size_of::<T>()
-    }
-}
-

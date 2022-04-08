@@ -24,7 +24,7 @@ impl Command {
         let stmt = match stmt_type {
             "insert" => <dyn Statement>::new(StatementType::INSERT, payload),
             "select" => <dyn Statement>::new(StatementType::SELECT, payload),
-            _ => return Err(Box::new(InvalidStatementError{stmt: String::from(self.data.as_str())})),
+            _ => return Err(Box::new(InvalidStatementError{stmt: Some(String::from(self.data.as_str()))})),
         };
 
         match stmt.prepare() {
