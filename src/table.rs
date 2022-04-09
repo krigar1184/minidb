@@ -1,3 +1,5 @@
+use std::mem::align_of;
+
 const ID_SIZE: usize = Attribute::<u64>::size_of();
 const ID_OFFSET: usize = 0;
 
@@ -13,6 +15,7 @@ const PAGE_SIZE: usize = 4096;
 const ROWS_PER_PAGE: usize = PAGE_SIZE / ROW_SIZE;
 const TABLE_MAX_ROWS: usize = ROWS_PER_PAGE * 100;
 
+#[derive(Debug)]
 struct SerializationError {
 }
 
@@ -33,35 +36,41 @@ impl<T> Attribute<T> {
     fn size(&self) -> usize {
         Self::size_of()
     }
+
+    fn serialize(&self, dst: *mut T) {
+        unsafe {
+            let offset = dst.align_offset(align_of::<T>());
+            std::ptr::copy_nonoverlapping(
+                &self.value,
+                dst.add(offset).cast::<T>(),
+                1,
+            );
+        }
+    }
+
 }
 
 impl Attribute<u64> {
-    fn serialize(&self, dst: *mut u8) {
+    fn deserialize(src: *const u8) -> Self {
         unsafe {
-            std::ptr::copy_nonoverlapping(self.value.to_ne_bytes().as_ptr(), dst.add(ID_OFFSET), self.size());
-        }
-    }
+            let dst: *mut u8 = std::mem::zeroed();
+            std::ptr::copy_nonoverlapping(src, dst, Self::size_of());
+            let value: u64 = std::mem::transmute(dst);
 
-    fn deserialize(&mut self, src: *const u8) {
-        let dst: *mut u8 = self.value.to_ne_bytes().as_mut_ptr();
-        unsafe {
-            std::ptr::copy_nonoverlapping(src, dst, self.size());
+            Self::new(value)
         }
     }
 }
 
 
-impl Attribute<&str> {
-    fn serialize(&self, dst: *mut u8) {
+impl Attribute<String> {
+    fn deserialize(src: *const u8) -> Self {
         unsafe {
-            std::ptr::copy_nonoverlapping(self.value.as_ptr(), dst.add(ID_OFFSET), self.size());
-        }
-    }
+            let dst: *mut u8 = std::mem::zeroed();
+            std::ptr::copy_nonoverlapping(src, dst, Self::size_of());
+            let value: String = String::from_raw_parts(dst, 1000, 1000);
 
-    fn deserialize(&mut self, src: *const u8) {
-        let dst: *mut u8 = self.value.as_mut_ptr();
-        unsafe {
-            std::ptr::copy_nonoverlapping(src, dst, self.size());
+            Self::new(value)
         }
     }
 }
@@ -93,16 +102,19 @@ impl<'a> Row<'a> {
 
     fn serialize(&self, dst: *mut u8) -> std::result::Result<(), SerializationError> {
         unsafe {
-            self.id.serialize(dst.offset(ID_OFFSET as isize));
-            self.username.serialize(dst.offset(USERNAME_OFFSET as isize));
-            self.email.serialize(dst.offset(EMAIL_OFFSET as isize));
+            dbg!(ID_OFFSET, USERNAME_OFFSET, EMAIL_OFFSET);
+            self.id.serialize(dst.add(ID_OFFSET).cast::<u64>());
+            self.username.serialize(dst.add(USERNAME_OFFSET).cast::<&str>());
+            self.email.serialize(dst.add(EMAIL_OFFSET).cast::<&str>());
         }
         Ok(())
     }
 
     fn deserialize(&mut self, src: *const u8) {
         unsafe {
-            self.id.deserialize(src.add(ID_OFFSET));
+            let id = Attribute::<u64>::deserialize(src.add(ID_OFFSET));
+            let username = Attribute::<String>::deserialize(src.add(USERNAME_OFFSET));
+            let email = Attribute::<String>::deserialize(src.add(EMAIL_OFFSET));
         }
     }
 }
@@ -114,7 +126,7 @@ struct Table {
 }
 
 impl Table {
-    fn row_slot(&mut self, row_num: usize) {
+    fn row_slot(&mut self, row_num: usize) -> usize {
         let pages = &mut self.pages;
         let page_num: usize = row_num / ROWS_PER_PAGE;
         let mut page = pages.get(page_num);
@@ -124,8 +136,29 @@ impl Table {
             page = pages.get(page_num);
         }
 
-        let page = page.unwrap();
+        let mut page = page.unwrap();
         let row_offset = row_num % ROWS_PER_PAGE;
         let byte_offset = row_offset * ROW_SIZE;
+
+        byte_offset
+    }
+}
+
+#[test]
+fn test_serialize() {
+    unsafe {
+        let mut t = Table{num_rows: 0, pages: vec![]};
+        let r = Row::new(666, "username", "email");
+        let p = std::ptr::addr_of_mut!(t).add(t.row_slot(0)).cast::<u8>();
+        r.serialize(p).unwrap();
+
+        dbg!(p, p.cast::<u64>().read());
+        assert_eq!(p.cast::<u64>().read(), r.id.value);
+
+        let p2 = p.add(ID_SIZE).cast::<&str>();
+        assert_eq!(p2.read(), r.username.value);
+
+        let p3 = p.add(ID_SIZE + USERNAME_SIZE).cast::<&str>();
+        p3.read();
     }
 }
