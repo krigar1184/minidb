@@ -53,24 +53,26 @@ impl<T> Attribute<T> {
 impl Attribute<u64> {
     fn deserialize(src: *const u8) -> Self {
         unsafe {
-            let dst: *mut u8 = std::mem::zeroed();
+            let layout = std::alloc::Layout::new::<u8>();
+            let dst = std::alloc::alloc(layout);
             std::ptr::copy_nonoverlapping(src, dst, Self::size_of());
-            let value: u64 = std::mem::transmute(dst);
+            let v = *dst.cast::<u64>();
 
-            Self::new(value)
+            Self::new(v)
         }
     }
 }
 
 
-impl Attribute<String> {
+impl<'a> Attribute<&'a str> {
     fn deserialize(src: *const u8) -> Self {
         unsafe {
-            let dst: *mut u8 = std::mem::zeroed();
+            let layout = std::alloc::Layout::new::<&'a str>();
+            let dst = std::alloc::alloc(layout);
             std::ptr::copy_nonoverlapping(src, dst, Self::size_of());
-            let value: String = String::from_raw_parts(dst, 1000, 1000);
+            let v = *dst.cast::<&'a str>();
 
-            Self::new(value)
+            Self::new(v)
         }
     }
 }
@@ -102,7 +104,6 @@ impl<'a> Row<'a> {
 
     fn serialize(&self, dst: *mut u8) -> std::result::Result<(), SerializationError> {
         unsafe {
-            dbg!(ID_OFFSET, USERNAME_OFFSET, EMAIL_OFFSET);
             self.id.serialize(dst.add(ID_OFFSET).cast::<u64>());
             self.username.serialize(dst.add(USERNAME_OFFSET).cast::<&str>());
             self.email.serialize(dst.add(EMAIL_OFFSET).cast::<&str>());
@@ -113,8 +114,12 @@ impl<'a> Row<'a> {
     fn deserialize(&mut self, src: *const u8) {
         unsafe {
             let id = Attribute::<u64>::deserialize(src.add(ID_OFFSET));
-            let username = Attribute::<String>::deserialize(src.add(USERNAME_OFFSET));
-            let email = Attribute::<String>::deserialize(src.add(EMAIL_OFFSET));
+            let username = Attribute::<&'a str>::deserialize(src.add(USERNAME_OFFSET));
+            let email = Attribute::<&'a str>::deserialize(src.add(EMAIL_OFFSET));
+
+            self.id = id;
+            self.username = username;
+            self.email = email;
         }
     }
 }
@@ -145,20 +150,21 @@ impl Table {
 }
 
 #[test]
-fn test_serialize() {
+fn test_serialize_and_deserialize() {
     unsafe {
         let mut t = Table{num_rows: 0, pages: vec![]};
-        let r = Row::new(666, "username", "email");
+        let mut r = Row::new(666, "username", "email");
         let p = std::ptr::addr_of_mut!(t).add(t.row_slot(0)).cast::<u8>();
         r.serialize(p).unwrap();
 
-        dbg!(p, p.cast::<u64>().read());
         assert_eq!(p.cast::<u64>().read(), r.id.value);
 
         let p2 = p.add(ID_SIZE).cast::<&str>();
         assert_eq!(p2.read(), r.username.value);
 
         let p3 = p.add(ID_SIZE + USERNAME_SIZE).cast::<&str>();
-        p3.read();
+        assert_eq!(p3.read(), r.email.value);
+
+        r.deserialize(p as *mut u8);
     }
 }
