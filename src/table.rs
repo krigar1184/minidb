@@ -166,5 +166,8 @@ fn test_serialize_and_deserialize() {
         assert_eq!(p3.read(), r.email.value);
 
         r.deserialize(p as *mut u8);
+        assert_eq!(r.id.value, 666);
+        assert_eq!(r.username.value, "username");
+        assert_eq!(r.email.value, "email")
     }
 }
